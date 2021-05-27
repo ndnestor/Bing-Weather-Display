@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Firefox;
@@ -16,15 +17,8 @@ namespace Backend {
 		private const int TimeoutTime = 10; // In seconds
 		// The HTML class used to determine whether a page is loaded or not
 		private const string LoadedCssIndicator = "div[class='b_antiTopBleed b_antiSideBleed b_antiBottomBleed']";
-		// Firefox input argument(s). Note that "--headless" argument will cause an exception
-		private const string Arguments = "--headless screenshot";
-
-		private static Process displayResultAhk;
-
-		private const int SW_HIDE = 0;
-		private const int SW_SHOW = 5;
-		[DllImport("User32")]
-		private static extern int ShowWindow(int hwnd, int nCmdShow);
+		// Firefox input argument(s). Note that the "--headless" argument alone will cause an exception
+		private const string Arguments = "";
 
 		// Call this before using any other methods in this class (returns false if it fails)
 		public static bool Initialize() {
@@ -39,6 +33,7 @@ namespace Backend {
 				FirefoxOptions options = new();
 				options.AddArguments(Arguments);
 				_webDriver = new FirefoxDriver(driverService, options);
+				_webDriver.Manage().Window.Minimize();
 
 				// Hide window
 				HideWindow("Mozilla Firefox");
@@ -47,6 +42,7 @@ namespace Backend {
 				return true;
 			} catch(Exception e) {
 				Console.WriteLine("Initialization failed with FATAL exception: " + e + "\n\nMake sure gecko driver is added to PATH");
+				CloseBrowser();
 				return false;
 			}
 		}
@@ -54,23 +50,18 @@ namespace Backend {
 		// Runs an AHK script that hides the window. A substitute for running headless
 		private static void HideWindow(string windowTitle) {
 			Process hideWindowAhk = new();
-			hideWindowAhk.StartInfo.FileName = @"F:\OneDrive - Rutgers University\Programming\Bing Weather Display\Frontend\Hide Window.exe";
+			hideWindowAhk.StartInfo.FileName = Path.Combine(GetCurrentPath(), @"AHK\Hide Window.exe");
 			hideWindowAhk.StartInfo.Arguments = "\"" + windowTitle + "\"";
 			hideWindowAhk.Start();
 		}
 
-		// Runs an AHK script that shows the weather image
-		public static void DisplayResult() {
-			if(displayResultAhk != null) {
-				displayResultAhk.Kill();
-			}
-			displayResultAhk = new Process();
-			displayResultAhk.StartInfo.FileName = @"F:\OneDrive - Rutgers University\Programming\Bing Weather Display\Frontend\Display Image.exe";
-			displayResultAhk.Start();
+		// Returns the path to the folder containing this process
+		public static string GetCurrentPath() {
+			return Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
 		}
 		
 		// Returns an image showing the weather forecast (returns null if it fails)
-		public static Bitmap GetWeather(string city, string state, bool saveResult=false) {
+		public static Bitmap GetWeather(string city, string state, bool saveResult=true) {
 			try {
 				// Navigate to the weather site
 				_webDriver.Navigate().GoToUrl(GetWeatherUrl(city, state));
@@ -80,6 +71,7 @@ namespace Backend {
 					return null;
 				}
 
+				// Hide the browser
 				HideWindow(_webDriver.Title + " — Mozilla Firefox");
 
 				// Take screenshot of page
@@ -89,11 +81,11 @@ namespace Backend {
 				// Crop the screenshot
 				Rectangle cropArea =
 					new(loadedElement.Location.X, loadedElement.Location.Y, loadedElement.Size.Width, loadedElement.Size
-						.Height);
+						.Height - 50);
 				screenshot = screenshot.Clone(cropArea, screenshot.PixelFormat);
 
 				if(saveResult) {
-					screenshot.Save(@"C:\tmp\Bing Weather.png", System.Drawing.Imaging.ImageFormat.Png);
+					screenshot.Save(Path.Combine(GetCurrentPath(), @"tmp\Bing Weather.png"), System.Drawing.Imaging.ImageFormat.Png);
 
 				}
 
@@ -128,7 +120,7 @@ namespace Backend {
 		}
 
 		// Closes the Selenium browser
-		private static void CloseBrowser() {
+		public static void CloseBrowser() {
 			_webDriver.Close();
 			_webDriver.Quit();
 		}
